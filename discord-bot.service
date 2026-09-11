@@ -1,0 +1,14 @@
+[Unit]
+Description=Discord AI Chatbot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=/home/zallkyre/discord_bot
+ExecStart=/usr/bin/python3 /home/zallkyre/discord_bot/Main.py
+Restart=always
+RestartSec=5
+User=zallkyre
+
+[Install]
+WantedBy=multi-user.target

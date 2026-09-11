@@ -1,31 +1,34 @@
 import discord
-from discord.ext import tasks, commands
+from discord.ext import commands
 from discord import app_commands
 import groq
 import psutil
-import requests
+import time
+import random
 
 # --- config ---
 with open("Discord.txt", "r") as f:
     TOKEN = f.read().strip()
 with open("AI.txt", "r") as f:
     GROQ_KEY = f.read().strip()
-with open("webhook.txt", "r") as f:
-    WEBHOOK_URL = f.read().strip()
 
 # --- setup ---
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 client = groq.Groq(api_key=GROQ_KEY)
+START_TIME = time.time()
 
-@tasks.loop(minutes=15)
-async def status_report():
-    ram = psutil.virtual_memory()
-    cpu = psutil.cpu_percent(interval=1)
-    msg = f"**bot status**\nram: {ram.used // 1048576}mb / {ram.total // 1048576}mb\ncpu: {cpu}%\nnet: online ✅"
-    requests.post(WEBHOOK_URL, json={"content": msg})
+SYSTEM_PROMPT = "answer in 1 sentence only. no caps. no emojis. no comfort. be direct."
 
+
+def uptime_str():
+    secs = int(time.time() - START_TIME)
+    h, m, s = secs // 3600, (secs % 3600) // 60, secs % 60
+    return f"{h}h {m}m {s}s"
+
+
+# --- commands ---
 @bot.tree.command(name="ai", description="ask gpt-oss-20b")
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @app_commands.allowed_installs(guilds=True, users=True)
@@ -34,20 +37,99 @@ async def ai(interaction: discord.Interaction, prompt: str):
     try:
         chat_completion = client.chat.completions.create(
             messages=[
-                {"role": "system", "content": "answer in 1 sentence only. no caps. no emojis. no comfort. be direct."},
+                {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": prompt}
             ],
             model="openai/gpt-oss-20b",
         )
         await interaction.followup.send(chat_completion.choices[0].message.content)
     except Exception as e:
-        await interaction.followup.send(f"⚠️ error: {e}")
+        await interaction.followup.send(f"error: {e}")
+
+
+@bot.tree.command(name="ping", description="bot latency")
+async def ping(interaction: discord.Interaction):
+    await interaction.response.send_message(f"pong! {round(bot.latency * 1000)}ms")
+
+
+@bot.tree.command(name="stats", description="pi stats")
+async def stats(interaction: discord.Interaction):
+    ram = psutil.virtual_memory()
+    cpu = psutil.cpu_percent(interval=1)
+    temp = None
+    try:
+        with open("/sys/class/thermal/thermal_zone0/temp") as f:
+            temp = round(int(f.read().strip()) / 1000, 1)
+    except Exception:
+        pass
+    msg = f"**pi stats**\nram: {ram.used // 1048576}mb / {ram.total // 1048576}mb\ncpu: {cpu}%\nuptime: {uptime_str()}"
+    if temp:
+        msg += f"\ntemp: {temp}c"
+    await interaction.response.send_message(msg)
+
+
+@bot.tree.command(name="roll", description="roll dice, e.g. /roll 2d6")
+async def roll(interaction: discord.Interaction, dice: str = "1d6"):
+    try:
+        count, sides = dice.lower().split("d")
+        count, sides = int(count), int(sides)
+        if count < 1 or count > 100 or sides < 2 or sides > 1000:
+            raise ValueError
+        results = [random.randint(1, sides) for _ in range(count)]
+        total = sum(results)
+        await interaction.response.send_message(f"{dice} -> {results} = **{total}**")
+    except Exception:
+        await interaction.response.send_message("use format like 2d6")
+
+
+@bot.tree.command(name="coin", description="flip a coin")
+async def coin(interaction: discord.Interaction):
+    await interaction.response.send_message(random.choice(["heads", "tails"]))
+
+
+@bot.tree.command(name="8ball", description="ask the magic 8 ball")
+async def eightball(interaction: discord.Interaction, question: str):
+    answers = ["yes", "no", "maybe", "definitely", "absolutely not", "ask again later", "signs point to yes", "don't count on it"]
+    await interaction.response.send_message(f"🎱 {random.choice(answers)}")
+
+
+@bot.tree.command(name="joke", description="tell a joke")
+async def joke(interaction: discord.Interaction):
+    jokes = [
+        "why did the programmer quit his job? because he didn't get arrays.",
+        "there are 10 types of people: those who understand binary and those who don't.",
+        "why do programmers prefer dark mode? because light attracts bugs.",
+        "i told my pi a joke about udp... i'm not sure it got it.",
+        "why did the raspberry pi go to therapy? it had too many unresolved issues.",
+        "why do java developers wear glasses? because they can't see sharp.",
+    ]
+    await interaction.response.send_message(random.choice(jokes))
+
+
+@bot.tree.command(name="uptime", description="how long the bot has been alive")
+async def uptime(interaction: discord.Interaction):
+    await interaction.response.send_message(f"alive for {uptime_str()}")
+
+
+@bot.tree.command(name="avatar", description="get someone's avatar")
+async def avatar(interaction: discord.Interaction, user: discord.User = None):
+    user = user or interaction.user
+    await interaction.response.send_message(user.display_avatar.url)
+
+
+@bot.tree.command(name="serverinfo", description="server info")
+async def serverinfo(interaction: discord.Interaction):
+    if interaction.guild is None:
+        await interaction.response.send_message("this is a dm, no server here")
+        return
+    g = interaction.guild
+    await interaction.response.send_message(f"**{g.name}**\nmembers: {g.member_count}\ncreated: {g.created_at.date()}")
+
 
 @bot.event
 async def on_ready():
     await bot.tree.sync()
-    if not status_report.is_running():
-        status_report.start()
-    requests.post(WEBHOOK_URL, json={"content": "⚡ bot online (192.168.1.14)"})
+    print(f"logged in as {bot.user}")
+
 
 bot.run(TOKEN)
