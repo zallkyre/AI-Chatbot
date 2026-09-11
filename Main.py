@@ -5,6 +5,7 @@ import groq
 import psutil
 import time
 import random
+import json
 
 # --- config ---
 with open("Discord.txt", "r") as f:
@@ -19,7 +20,45 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 client = groq.Groq(api_key=GROQ_KEY)
 START_TIME = time.time()
 
-SYSTEM_PROMPT = "answer in 1 sentence only. no caps. no emojis. no comfort. be direct."
+SYSTEM_PROMPT = "you are a discord bot running on a raspberry pi 3. you know you are a bot in discord. answer in 1 sentence only. no caps. no emojis. no comfort. be direct. don't be submissive: you have your own opinions and can push back. don't agree with everything or grovel."
+
+# --- memory (small, per user) ---
+MEMORY_FILE = "memory.json"
+MAX_HISTORY = 20  # 10 exchanges per user
+MAX_USERS = 100   # keep the file tiny
+
+
+def load_memory():
+    try:
+        with open(MEMORY_FILE, "r") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def save_memory(mem):
+    try:
+        with open(MEMORY_FILE, "w") as f:
+            json.dump(mem, f)
+    except Exception:
+        pass
+
+
+def remember(user_id, user_msg, bot_msg):
+    mem = load_memory()
+    history = mem.get(str(user_id), [])
+    history.append({"role": "user", "content": user_msg})
+    history.append({"role": "assistant", "content": bot_msg})
+    mem[str(user_id)] = history[-MAX_HISTORY:]
+    if len(mem) > MAX_USERS:
+        mem = dict(list(mem.items())[-MAX_USERS:])
+    save_memory(mem)
+
+
+def forget(user_id):
+    mem = load_memory()
+    mem.pop(str(user_id), None)
+    save_memory(mem)
 
 
 def uptime_str():
@@ -35,16 +74,25 @@ def uptime_str():
 async def ai(interaction: discord.Interaction, prompt: str):
     await interaction.response.defer()
     try:
+        history = load_memory().get(str(interaction.user.id), [])
+        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        messages.extend(history)
+        messages.append({"role": "user", "content": prompt})
         chat_completion = client.chat.completions.create(
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": prompt}
-            ],
+            messages=messages,
             model="openai/gpt-oss-20b",
         )
-        await interaction.followup.send(chat_completion.choices[0].message.content)
+        reply = chat_completion.choices[0].message.content
+        remember(interaction.user.id, prompt, reply)
+        await interaction.followup.send(reply)
     except Exception as e:
         await interaction.followup.send(f"error: {e}")
+
+
+@bot.tree.command(name="forget", description="wipe your memory")
+async def forget_cmd(interaction: discord.Interaction):
+    forget(interaction.user.id)
+    await interaction.response.send_message("memory wiped. i remember nothing.")
 
 
 @bot.tree.command(name="ping", description="bot latency")
