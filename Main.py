@@ -174,6 +174,24 @@ async def serverinfo(interaction: discord.Interaction):
     await interaction.response.send_message(f"**{g.name}**\nmembers: {g.member_count}\ncreated: {g.created_at.date()}")
 
 
+@bot.tree.command(name="purge", description="delete the last N messages in this channel")
+@app_commands.allowed_contexts(guilds=True)
+async def purge(interaction: discord.Interaction, amount: int):
+    if interaction.channel is None:
+        await interaction.response.send_message("can't purge here")
+        return
+    perms = interaction.channel.permissions_for(interaction.user)
+    if not perms.manage_messages:
+        await interaction.response.send_message("you need manage_messages permission for that")
+        return
+    if amount < 1 or amount > 100:
+        await interaction.response.send_message("pick a number between 1 and 100")
+        return
+    await interaction.response.defer(ephemeral=True)
+    deleted = await interaction.channel.purge(limit=amount)
+    await interaction.followup.send(f"purged {len(deleted)} messages", ephemeral=True)
+
+
 @bot.event
 async def on_ready():
     await bot.tree.sync()
