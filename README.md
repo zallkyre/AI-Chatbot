@@ -122,3 +122,7 @@ MIT — do whatever you want with it.
 **Made with ❤️ and a Raspberry Pi**
 
 </div>
+
+---
+
+**LLM guide** — Simple lightweight open-source discord bot. · Stack: Python · Entry: `Main.py` · License: MIT
