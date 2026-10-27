@@ -4,7 +4,7 @@
 
 **A lightweight Discord AI bot that lives 24/7 on a Raspberry Pi 3**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: MIT-0 - no conditions, resale allowed
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![Discord.py](https://img.shields.io/badge/discord.py-2.x-5865F2.svg)](https://discordpy.readthedocs.io/)
 [![Groq](https://img.shields.io/badge/Groq-gpt--oss--20b-orange.svg)](https://groq.com/)
